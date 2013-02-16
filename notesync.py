@@ -49,6 +49,9 @@ def mail_to_text(mail):
         text = text.replace('^n^m', '^n')
         text = text.replace('^m^m', '^m')
 
+    while text.startswith('^m') or text.startswith('^n'):
+        text = text[2:]
+
     text = text.replace('^n', '\n')
     text = text.replace('^m', '\n')
     text = text.replace('^~', '^')
@@ -149,7 +152,6 @@ if __name__ == '__main__':
                     mail.uid('store', mail_uid, '+FLAGS', '\\Deleted')
                     msg = "Subject: " + mail_message['Subject'] + "\r\n"
                     msg += "From: " + credentials['username'] + "\r\n"
-#                    msg += "To: " + credentials['username'] + "\r\n"
                     msg += "Date: " + local_note_date.strftime('%a, %d %b %Y %H:%M:%S -800') + "\r\n"
                     msg += "X-Universally-Unique-Identifier: " + mail_message['X-Universally-Unique-Identifier'] + "\r\n"
                     msg += "X-Uniform-Type-Identifier: com.apple.mail-note\r\n"
