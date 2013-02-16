@@ -6,6 +6,8 @@ import imaplib
 import json
 import email
 import re
+import datetime
+import os
 
 
 def usage(err=""):
@@ -62,7 +64,7 @@ def text_to_mail(text):
                 end = len(text)
             if text[end-1] == ' ':
                 end += 1
-            yield text[start:end] + '=\r\n'
+            yield text[start:end] #+ '=\r\n'
             start = end
 
     text = text.replace('^', '^~')
@@ -121,23 +123,45 @@ if __name__ == '__main__':
 
         if mail_message['Subject'] in notes and \
                 mail_message['X-Uniform-Type-Identifier'] == 'com.apple.mail-note':
-            print mail_message['Subject']
-            print mail_message['X-Universally-Unique-Identifier']
-            print mail_message['X-Uniform-Type-Identifier']
-            print mail_message['Message-Id']
-            print mail_message['X-Mail-Created-Date']
-
             assert mail_message.get_content_maintype() == 'text', 'unhandled content maintype'
 
             mail_payload = mail_message.get_payload()
+            note_text = mail_to_text(mail_payload)
 
-            print mail_payload
-            print '===================='
-            print mail_to_text(mail_payload)
-            print '********************'
-            print text_to_mail(mail_to_text(mail_payload))
-            print '^^^^^^^^^^^^^^^^^^^^'
-            print mail_to_text(text_to_mail(mail_to_text(mail_payload)))
-            print '#####################'
+            local_note_filename = mail_message['Subject'] + '.txt'
+            try:
+                with open(local_note_filename, 'r') as f:
+                    local_note_text = f.read()
+                    local_note_date = datetime.datetime.fromtimestamp(os.path.getmtime(local_note_filename))
+            except IOError:
+                local_note_text = ''
+                local_note_date = datetime.datetime.min
 
+            # Sat, 16 Feb 2013 00:08:49 -0800
+            # note: we are stripping timezone data
+            note_date = datetime.datetime.strptime(mail_message['Date'][:-6],'%a, %d %b %Y %H:%M:%S')
+
+            if note_text != local_note_text:
+                print "local/remote mismatch"
+
+                if note_date < local_note_date:
+                    print "local is newer, sync -> remote"
+                    mail.uid('store', mail_uid, '+FLAGS', '\\Deleted')
+                    msg = "Subject: " + mail_message['Subject'] + "\r\n"
+                    msg += "From: " + credentials['username'] + "\r\n"
+#                    msg += "To: " + credentials['username'] + "\r\n"
+                    msg += "Date: " + local_note_date.strftime('%a, %d %b %Y %H:%M:%S -800') + "\r\n"
+                    msg += "X-Universally-Unique-Identifier: " + mail_message['X-Universally-Unique-Identifier'] + "\r\n"
+                    msg += "X-Uniform-Type-Identifier: com.apple.mail-note\r\n"
+                    msg += "X-Mail-Created-Date: " + mail_message['X-Mail-Created-Date'] + "\r\n"
+#                    msg += "\r\n" + text_to_mail(local_note_text)
+                    msg += "\r\n" + local_note_text
+                    mail.append('Notes', '\Seen', '', msg)
+                else:
+                    print "remote is newer, sync -> local"
+                    with open(local_note_filename, 'w') as f:
+                        f.write(note_text)
+
+
+    mail.expunge()
     mail.close()
